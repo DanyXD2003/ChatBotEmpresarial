@@ -102,6 +102,14 @@ export default function LoginPage() {
               >
                 {isLoading ? "Ingresando..." : "Ingresar"}
               </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full border-border text-muted-foreground hover:text-foreground"
+                onClick={() => router.push("/chat")}
+              >
+                Ingreso de prueba
+              </Button>
             </form>
           </CardContent>
         </Card>
