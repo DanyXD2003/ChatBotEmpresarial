@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { canAccessPath, getRoleLabel, type AppUser } from "@/lib/auth";
+import { logoutAction } from "@/app/(auth)/login/actions";
 import {
   Bot,
   MessageSquare,
   BookOpen,
   BarChart3,
   Users,
-  Settings,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -23,13 +24,14 @@ const navigation = [
   { name: "Agentes", href: "/agents", icon: Users },
 ];
 
-const bottomNavigation = [
-  { name: "Configuración", href: "/settings", icon: Settings },
-];
+type SidebarProps = {
+  user: AppUser;
+};
 
-export function Sidebar() {
+export function Sidebar({ user }: SidebarProps) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
+  const visibleNavigation = navigation.filter((item) => canAccessPath(user.role, item.href));
 
   return (
     <aside
@@ -70,7 +72,7 @@ export function Sidebar() {
               Principal
             </p>
           )}
-          {navigation.map((item) => {
+          {visibleNavigation.map((item) => {
             const isActive = pathname === item.href;
             return (
               <Link
@@ -93,31 +95,15 @@ export function Sidebar() {
 
       {/* Bottom Navigation */}
       <div className="border-t border-sidebar-border p-3">
-        {bottomNavigation.map((item) => {
-          const isActive = pathname === item.href;
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-sidebar-accent text-sidebar-primary"
-                  : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-              )}
-            >
-              <item.icon className="h-5 w-5 shrink-0" />
-              {!collapsed && <span>{item.name}</span>}
-            </Link>
-          );
-        })}
-        <Link
-          href="/login"
-          className="mt-1 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-        >
-          <LogOut className="h-5 w-5 shrink-0" />
-          {!collapsed && <span>Cerrar Sesión</span>}
-        </Link>
+        <form action={logoutAction}>
+          <button
+            type="submit"
+            className="mt-1 flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          >
+            <LogOut className="h-5 w-5 shrink-0" />
+            {!collapsed && <span>Cerrar Sesión</span>}
+          </button>
+        </form>
       </div>
 
       {/* User Info */}
@@ -125,14 +111,14 @@ export function Sidebar() {
         <div className="border-t border-sidebar-border p-3">
           <div className="flex items-center gap-3 rounded-lg bg-sidebar-accent px-3 py-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-xs font-medium text-primary-foreground">
-              RM
+              {user.initials}
             </div>
             <div className="flex-1 truncate">
               <p className="truncate text-sm font-medium text-sidebar-foreground">
-                Roberto Méndez
+                {user.name}
               </p>
               <p className="truncate text-xs text-sidebar-foreground/60">
-                Administrador
+                {getRoleLabel(user.role)}
               </p>
             </div>
           </div>
