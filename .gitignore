@@ -1,0 +1,13 @@
+# Claude Code generated files
+CLAUDE.md
+.claude/
+memory/
+
+# System files
+.DS_Store
+.env*.local
+
+# Project specific
+b_E99hORfCaco/log1.md
+.DS_Store
+.DS_Store
