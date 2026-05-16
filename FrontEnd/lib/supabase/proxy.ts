@@ -1,7 +1,29 @@
-import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { canAccessPath, getDefaultRoute, isProtectedRoute, normalizeRole } from "@/lib/auth";
-import { getSupabaseEnv } from "@/lib/supabase/config";
+
+/**
+ * Decodifica la cabecera y el payload de un JWT sin verificar la firma.
+ * Esto es suficiente para el middleware de rutas del frontend; la
+ * verificación real se hace en el backend.
+ */
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return null;
+
+    // El payload es la segunda parte (index 1)
+    const payload = parts[1];
+    const decoded = JSON.parse(atob(payload));
+
+    // Verificar expiración
+    const now = Math.floor(Date.now() / 1000);
+    if (decoded.exp && decoded.exp < now) return null;
+
+    return decoded;
+  } catch {
+    return null;
+  }
+}
 
 function redirectToLogin(request: NextRequest) {
   const loginUrl = new URL("/login", request.url);
@@ -15,48 +37,27 @@ function redirectToLogin(request: NextRequest) {
 }
 
 export async function updateSession(request: NextRequest) {
-  const env = getSupabaseEnv();
-
-  if (!env) {
-    if (isProtectedRoute(request.nextUrl.pathname)) {
-      return redirectToLogin(request);
-    }
-
-    return NextResponse.next({ request });
-  }
-
-  let response = NextResponse.next({ request });
-
-  const supabase = createServerClient(env.url, env.publishableKey, {
-    cookies: {
-      getAll() {
-        return request.cookies.getAll();
-      },
-      setAll(cookiesToSet) {
-        cookiesToSet.forEach(({ name, value, options }) => {
-          request.cookies.set(name, value);
-          response.cookies.set(name, value, options);
-        });
-      },
-    },
-  });
-
-  const { data: claimsData } = await supabase.auth.getClaims();
-  const claims = claimsData?.claims;
-
   const pathname = request.nextUrl.pathname;
   const isLoginRoute = pathname === "/login";
 
+  // Leer el JWT custom de la cookie
+  const authToken = request.cookies.get("auth_token")?.value;
+
+  if (!authToken) {
+    return isProtectedRoute(pathname) ? redirectToLogin(request) : NextResponse.next({ request });
+  }
+
+  // Decodificar el JWT para extraer claims
+  const claims = decodeJwtPayload(authToken);
+
   if (!claims) {
+    // Token inválido o expirado
+    const response = NextResponse.next({ request });
+    response.cookies.delete("auth_token");
     return isProtectedRoute(pathname) ? redirectToLogin(request) : response;
   }
 
-  const role = normalizeRole(
-    claims.app_metadata?.role ??
-      claims.user_metadata?.role ??
-      claims.app_metadata?.user_role ??
-      claims.user_metadata?.user_role
-  );
+  const role = normalizeRole(claims.role);
 
   if (isLoginRoute) {
     return NextResponse.redirect(new URL(getDefaultRoute(role), request.url));
@@ -66,5 +67,5 @@ export async function updateSession(request: NextRequest) {
     return NextResponse.redirect(new URL(getDefaultRoute(role), request.url));
   }
 
-  return response;
+  return NextResponse.next({ request });
 }

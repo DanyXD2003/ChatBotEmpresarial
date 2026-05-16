@@ -14,12 +14,16 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  Globe,
+  UserCircle,
 } from "lucide-react";
 import { useState } from "react";
 
 const navigation = [
   { name: "Chat", href: "/chat", icon: MessageSquare },
   { name: "Base de Conocimiento", href: "/knowledge", icon: BookOpen },
+  { name: "Canales", href: "/canales", icon: Globe },
+  { name: "Usuarios", href: "/usuarios", icon: UserCircle },
   { name: "Reportes", href: "/reports", icon: BarChart3 },
   { name: "Agentes", href: "/agents", icon: Users },
 ];

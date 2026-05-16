@@ -1,7 +1,6 @@
 "use client";
 
-import { useState } from "react";
-import { initialAgents, type Agent } from "@/lib/data";
+import { useEffect, useState, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -18,10 +17,8 @@ import {
   Search,
   UserPlus,
   MoreHorizontal,
-  Mail,
-  Settings,
   Trash2,
-  X,
+  LoaderCircle,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -44,17 +41,59 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { cn } from "@/lib/utils";
+import {
+  listAgents,
+  createAgent,
+  deleteAgent,
+  updateAgent,
+  type AgentFrontend,
+} from "./actions";
 
 export default function AgentsPage() {
-  const [agents, setAgents] = useState<Agent[]>(initialAgents);
+  const [agents, setAgents] = useState<AgentFrontend[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+
+  // Add dialog
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [newAgent, setNewAgent] = useState({
     name: "",
     email: "",
-    role: "agente" as Agent["role"],
+    role: "agente" as AgentFrontend["role"],
   });
+  const [saving, setSaving] = useState(false);
+
+  // Delete dialog
+  const [deleteTarget, setDeleteTarget] = useState<AgentFrontend | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const fetchAgents = useCallback(async () => {
+    try {
+      setError(null);
+      const data = await listAgents();
+      setAgents(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al cargar agentes");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAgents();
+  }, [fetchAgents]);
 
   const filteredAgents = agents.filter(
     (agent) =>
@@ -62,43 +101,48 @@ export default function AgentsPage() {
       agent.email.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleAddAgent = () => {
+  const handleAddAgent = async () => {
     if (!newAgent.name || !newAgent.email) return;
-
-    const agent: Agent = {
-      id: `${Date.now()}`,
-      name: newAgent.name,
-      email: newAgent.email,
-      role: newAgent.role,
-      status: "offline",
-      conversationsToday: 0,
-    };
-
-    setAgents((prev) => [...prev, agent]);
-    setNewAgent({ name: "", email: "", role: "agente" });
-    setIsAddDialogOpen(false);
+    setSaving(true);
+    try {
+      const created = await createAgent({
+        nombre: newAgent.name,
+        email: newAgent.email,
+        rol: newAgent.role,
+      });
+      setAgents((prev) => [...prev, created]);
+      setNewAgent({ name: "", email: "", role: "agente" });
+      setIsAddDialogOpen(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al crear agente");
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const handleDeleteAgent = (agentId: string) => {
-    setAgents((prev) => prev.filter((a) => a.id !== agentId));
+  const handleDeleteAgent = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await deleteAgent(deleteTarget.id);
+      setAgents((prev) => prev.filter((a) => a.id !== deleteTarget.id));
+      setDeleteTarget(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al eliminar agente");
+    } finally {
+      setDeleting(false);
+    }
   };
 
-  const handleToggleStatus = (agentId: string) => {
-    setAgents((prev) =>
-      prev.map((a) =>
-        a.id === agentId
-          ? {
-              ...a,
-              status:
-                a.status === "online"
-                  ? "away"
-                  : a.status === "away"
-                  ? "offline"
-                  : "online",
-            }
-          : a
-      )
-    );
+  const handleToggleStatus = async (agent: AgentFrontend) => {
+    // Toggle: online -> offline, offline -> online
+    const newDisponible = agent.status !== "online";
+    try {
+      const updated = await updateAgent(agent.id, { disponible: newDisponible });
+      setAgents((prev) => prev.map((a) => (a.id === agent.id ? updated : a)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al cambiar estado");
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -158,6 +202,14 @@ export default function AgentsPage() {
     );
   };
 
+  if (loading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <LoaderCircle className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col p-6">
       {/* Header */}
@@ -167,6 +219,14 @@ export default function AgentsPage() {
           Gestiona el personal de soporte de tu organización
         </p>
       </div>
+
+      {/* Error banner */}
+      {error && (
+        <div className="mb-4 rounded-lg border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+          <button onClick={() => setError(null)} className="ml-2 underline">Cerrar</button>
+        </div>
+      )}
 
       {/* Actions Bar */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -203,9 +263,9 @@ export default function AgentsPage() {
           </p>
         </div>
         <div className="rounded-lg border border-border bg-card p-4">
-          <p className="text-sm text-muted-foreground">Conversaciones Hoy</p>
+          <p className="text-sm text-muted-foreground">Disponibles</p>
           <p className="mt-1 text-2xl font-bold text-card-foreground">
-            {agents.reduce((acc, agent) => acc + agent.conversationsToday, 0)}
+            {agents.filter((a) => a.status === "online" || a.status === "away").length}
           </p>
         </div>
       </div>
@@ -219,9 +279,6 @@ export default function AgentsPage() {
               <TableHead className="text-muted-foreground">Email</TableHead>
               <TableHead className="text-muted-foreground">Rol</TableHead>
               <TableHead className="text-muted-foreground">Estado</TableHead>
-              <TableHead className="text-muted-foreground">
-                Conversaciones Hoy
-              </TableHead>
               <TableHead className="w-[50px] text-muted-foreground"></TableHead>
             </TableRow>
           </TableHeader>
@@ -257,12 +314,9 @@ export default function AgentsPage() {
                 </TableCell>
                 <TableCell>{getRoleBadge(agent.role)}</TableCell>
                 <TableCell>
-                  <button onClick={() => handleToggleStatus(agent.id)}>
+                  <button onClick={() => handleToggleStatus(agent)}>
                     {getStatusBadge(agent.status)}
                   </button>
-                </TableCell>
-                <TableCell className="text-foreground">
-                  {agent.conversationsToday}
                 </TableCell>
                 <TableCell>
                   <DropdownMenu>
@@ -279,16 +333,8 @@ export default function AgentsPage() {
                       align="end"
                       className="border-border bg-popover"
                     >
-                      <DropdownMenuItem className="text-popover-foreground focus:bg-muted focus:text-foreground">
-                        <Mail className="mr-2 h-4 w-4" />
-                        Enviar mensaje
-                      </DropdownMenuItem>
-                      <DropdownMenuItem className="text-popover-foreground focus:bg-muted focus:text-foreground">
-                        <Settings className="mr-2 h-4 w-4" />
-                        Editar permisos
-                      </DropdownMenuItem>
                       <DropdownMenuItem 
-                        onClick={() => handleDeleteAgent(agent.id)}
+                        onClick={() => setDeleteTarget(agent)}
                         className="text-destructive focus:bg-destructive/10 focus:text-destructive"
                       >
                         <Trash2 className="mr-2 h-4 w-4" />
@@ -353,7 +399,7 @@ export default function AgentsPage() {
               </Label>
               <Select
                 value={newAgent.role}
-                onValueChange={(value: Agent["role"]) =>
+                onValueChange={(value: AgentFrontend["role"]) =>
                   setNewAgent((prev) => ({ ...prev, role: value }))
                 }
               >
@@ -378,14 +424,52 @@ export default function AgentsPage() {
             </Button>
             <Button
               onClick={handleAddAgent}
-              disabled={!newAgent.name || !newAgent.email}
+              disabled={!newAgent.name || !newAgent.email || saving}
               className="bg-primary text-primary-foreground hover:bg-primary/90"
             >
-              Agregar agente
+              {saving ? (
+                <>
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                "Agregar agente"
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent className="border-border bg-card">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-foreground">Eliminar agente</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro de que deseas eliminar a <strong>{deleteTarget?.name}</strong>? Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-border text-foreground hover:bg-muted">
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteAgent}
+              disabled={deleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deleting ? (
+                <>
+                  <LoaderCircle className="mr-2 h-4 w-4 animate-spin" />
+                  Eliminando...
+                </>
+              ) : (
+                "Eliminar"
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
