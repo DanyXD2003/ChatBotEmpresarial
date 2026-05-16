@@ -9,11 +9,11 @@ export type AppUser = {
   role: AppRole;
 };
 
-const protectedRoutes = ["/chat", "/knowledge", "/reports", "/agents"] as const;
+const protectedRoutes = ["/chat", "/knowledge", "/reports", "/agents", "/canales", "/usuarios"] as const;
 
 const roleRouteAccess: Record<AppRole, string[]> = {
   admin: [...protectedRoutes],
-  supervisor: ["/chat", "/knowledge", "/reports"],
+  supervisor: ["/chat", "/knowledge", "/reports", "/canales", "/usuarios"],
   agente: ["/chat", "/knowledge"],
 };
 

@@ -12,10 +12,9 @@ const initialState: LoginFormState = {};
 
 type LoginFormProps = {
   nextPath?: string;
-  configWarning?: string | null;
 };
 
-export function LoginForm({ nextPath, configWarning }: LoginFormProps) {
+export function LoginForm({ nextPath }: LoginFormProps) {
   const [showPassword, setShowPassword] = useState(false);
   const [state, formAction, isPending] = useActionState(loginAction, initialState);
 
@@ -24,7 +23,7 @@ export function LoginForm({ nextPath, configWarning }: LoginFormProps) {
       <CardHeader className="space-y-1 pb-4">
         <CardTitle className="text-xl text-card-foreground">Iniciar sesión</CardTitle>
         <CardDescription>
-          Ingresa tus credenciales de Supabase para acceder a la plataforma.
+          Ingresa tu correo y contraseña para acceder a la plataforma.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -71,9 +70,9 @@ export function LoginForm({ nextPath, configWarning }: LoginFormProps) {
             </div>
           </div>
 
-          {(configWarning || state.error) && (
+          {state.error && (
             <div className="rounded-lg border border-destructive/20 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-              {state.error ?? configWarning}
+              {state.error}
             </div>
           )}
 

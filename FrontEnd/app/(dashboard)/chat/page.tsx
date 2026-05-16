@@ -1,8 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { initialConversations, type Conversation, type Message } from "@/lib/data";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -16,15 +15,45 @@ import {
   Video,
   Paperclip,
   Smile,
+  LoaderCircle,
+  RefreshCw,
 } from "lucide-react";
+import {
+  listConversations,
+  sendMessage,
+  type ConversationFrontend,
+  type MessageFrontend,
+} from "./actions";
 
 export default function ChatPage() {
-  const [conversations, setConversations] = useState<Conversation[]>(initialConversations);
-  const [selectedConversationId, setSelectedConversationId] = useState(conversations[0].id);
+  const [conversations, setConversations] = useState<ConversationFrontend[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [sending, setSending] = useState(false);
 
   const selectedConversation = conversations.find((c) => c.id === selectedConversationId);
+
+  const fetchConversations = useCallback(async () => {
+    try {
+      setError(null);
+      const data = await listConversations("activa");
+      setConversations(data);
+      if (data.length > 0 && !selectedConversationId) {
+        setSelectedConversationId(data[0].id);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al cargar conversaciones");
+    } finally {
+      setLoading(false);
+    }
+  }, [selectedConversationId]);
+
+  useEffect(() => {
+    fetchConversations();
+  }, [fetchConversations]);
 
   const filteredConversations = conversations.filter((conv) =>
     conv.userName.toLowerCase().includes(searchQuery.toLowerCase())
@@ -32,7 +61,6 @@ export default function ChatPage() {
 
   const handleSelectConversation = (conversationId: string) => {
     setSelectedConversationId(conversationId);
-    // Mark as read
     setConversations((prev) =>
       prev.map((c) =>
         c.id === conversationId ? { ...c, unread: false } : c
@@ -40,53 +68,53 @@ export default function ChatPage() {
     );
   };
 
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!message.trim() || !selectedConversation) return;
+    setSending(true);
+    try {
+      const userMsg = await sendMessage(selectedConversation.id, message);
 
-    const now = new Date();
-    const timeString = now.toLocaleTimeString("es-ES", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    });
+      const newUserMessage: MessageFrontend = {
+        id: userMsg.id,
+        sender: "user",
+        content: message,
+        timestamp: "Ahora",
+      };
 
-    const newUserMessage: Message = {
-      id: `${Date.now()}`,
-      sender: "user",
-      content: message,
-      timestamp: timeString,
-    };
+      // Simulated bot response (backend doesn't have bot endpoint)
+      const botResponses = [
+        "Entiendo tu consulta. Déjame verificar esa información para ti.",
+        "Gracias por tu mensaje. Estoy procesando tu solicitud.",
+        "He registrado tu petición. Un agente se comunicará contigo pronto.",
+        "Perfecto, ¿hay algo más en lo que pueda ayudarte?",
+        "Estoy revisando los detalles. Te confirmo en un momento.",
+      ];
 
-    // Simulated bot response
-    const botResponses = [
-      "Entiendo tu consulta. Déjame verificar esa información para ti.",
-      "Gracias por tu mensaje. Estoy procesando tu solicitud.",
-      "He registrado tu petición. Un agente se comunicará contigo pronto.",
-      "Perfecto, ¿hay algo más en lo que pueda ayudarte?",
-      "Estoy revisando los detalles. Te confirmo en un momento.",
-    ];
+      const newBotMessage: MessageFrontend = {
+        id: `${Date.now() + 1}`,
+        sender: "bot",
+        content: botResponses[Math.floor(Math.random() * botResponses.length)],
+        timestamp: "Ahora",
+      };
 
-    const newBotMessage: Message = {
-      id: `${Date.now() + 1}`,
-      sender: "bot",
-      content: botResponses[Math.floor(Math.random() * botResponses.length)],
-      timestamp: timeString,
-    };
-
-    setConversations((prev) =>
-      prev.map((c) =>
-        c.id === selectedConversationId
-          ? {
-              ...c,
-              messages: [...c.messages, newUserMessage, newBotMessage],
-              lastMessage: message,
-              timestamp: "Ahora",
-            }
-          : c
-      )
-    );
-
-    setMessage("");
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.id === selectedConversation.id
+            ? {
+                ...c,
+                messages: [...c.messages, newUserMessage, newBotMessage],
+                lastMessage: message,
+                timestamp: "Ahora",
+              }
+            : c
+        )
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error al enviar mensaje");
+    } finally {
+      setSending(false);
+      setMessage("");
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
